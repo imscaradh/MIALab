@@ -4,6 +4,8 @@ import sys
 import timeit
 import numpy as np
 import SimpleITK as sitk
+from sklearn import metrics
+import matplotlib.pyplot as plt
 
 import pymia.data.conversion as conversion
 import pymia.evaluation.writer as writer
@@ -29,7 +31,7 @@ LOADING_KEYS = [structure.BrainImageTypes.T1w,
 class ClassificationController():
 
     def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir):
-        self.classifiers = [(clf, [], []) for clf in classifiers]
+        self.classifiers = [(clf, [], [], []) for clf in classifiers]
 
         for clf in self.classifiers:
             print(f'Classifier: {clf}')
@@ -38,7 +40,6 @@ class ClassificationController():
         self.data_atlas_dir = data_atlas_dir
 
         # load atlas images
-        # TODO: Not sure if this is necessary at this point
         putil.load_atlas_images(data_atlas_dir)
 
         # crawl the training image directories
@@ -59,7 +60,7 @@ class ClassificationController():
 
         # generate feature matrix and label vector
         self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
-        self.X_target = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
+        self.y_train = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
 
         # crawl the test image directories
         crawler = futil.FileSystemDataCrawler(data_test_dir,
@@ -74,11 +75,11 @@ class ClassificationController():
         self.evaluator = putil.init_evaluator()
 
     def train(self):
-        for clf, _, _ in self.classifiers:
-            print('-' * 5, f'[{clf}] Training...')
+        for clf, _, _, _ in self.classifiers:
+            print('-' * 5, 'Training...')
 
             start_time = timeit.default_timer()
-            clf.fit(self.X_train, self.X_target)
+            clf.fit(self.X_train, self.y_train)
             print(f' [{clf}] Time elapsed:', timeit.default_timer() - start_time, 's')
 
     def feature_importance(self):
@@ -102,7 +103,7 @@ class ClassificationController():
         result_dir = os.path.join(self.result_dir, t)
         os.makedirs(result_dir, exist_ok=True)
 
-        for clf, images_prediction, images_probabilities in self.classifiers:
+        for clf, y_true, y_pred, y_pred_proba in self.classifiers:
             for img in self.X_test:
                 print('-' * 10, 'Testing', img.id_)
 
@@ -118,8 +119,9 @@ class ClassificationController():
                 # evaluate segmentation without post-processing
                 self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
-                images_prediction.append(image_prediction)
-                images_probabilities.append(image_probabilities)
+                y_true.append(sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth]))
+                y_pred.append(predictions)
+                y_pred_proba.append(probabilities)
 
     def post_process(self):
         # post-process segmentation and evaluate with post-processing
@@ -129,25 +131,40 @@ class ClassificationController():
         pass
 
     def evaluate(self):
-        for clf, images_prediction, images_probabilities in self.classifiers:
-            for i, img in enumerate(self.X_test):
-                # save results
-                sitk.WriteImage(images_prediction[i], os.path.join(self.result_dir, self.X_test[i].id_ + '_SEG.mha'), True)
+        for clf, y_true, y_pred, y_pred_proba in self.classifiers:
+            y_true = np.concatenate(y_true, axis=0)
+            y_pred = np.concatenate(y_pred, axis=0)
+            fpr, tpr, _ = metrics.roc_curve(y_true, y_pred)
 
-            # use two writers to report the results
-            os.makedirs(self.result_dir, exist_ok=True)  # generate result directory, if it does not exists
-            result_file = os.path.join(self.result_dir, 'results.csv')
-            writer.CSVWriter(result_file).write(self.evaluator.results)
+            # # create ROC curve
+            plt.ylabel('True Positive Rate (TPR)')
+            plt.xlabel('False Positive Rate (FPR)')
 
-            print('\nSubject-wise results...')
-            writer.ConsoleWriter().write(self.evaluator.results)
+            plt.plot(fpr, tpr, label=f'AUC={auc}')
+            plt.legend(loc=4)
 
-            # report also mean and standard deviation among all subjects
-            result_summary_file = os.path.join(self.result_dir, 'results_summary.csv')
-            functions = {'MEAN': np.mean, 'STD': np.std}
-            writer.CSVStatisticsWriter(result_summary_file, functions=functions).write(self.evaluator.results)
-            print('\nAggregated statistic results...')
-            writer.ConsoleStatisticsWriter(functions=functions).write(self.evaluator.results)
+            plt.show()
+            plt.savefig(os.path.join(self.result_dir, clf.__name__, 'roc.png'))
 
-            # clear results such that the evaluator is ready for the next evaluation
-            self.evaluator.clear()
+            #evaluation_results = self.evaluator.results
+            # for i, img in enumerate(self.X_test):
+            #     # save results
+            #     sitk.WriteImage(y_pred[i], os.path.join(self.result_dir, self.X_test[i].id_ + '_SEG.mha'), True)
+
+            # # use two writers to report the results
+            # os.makedirs(self.result_dir, exist_ok=True)  # generate result directory, if it does not exists
+            # result_file = os.path.join(self.result_dir, 'results.csv')
+            # writer.CSVWriter(result_file).write(self.evaluator.results)
+
+            # print('\nSubject-wise results...')
+            # writer.ConsoleWriter().write(self.evaluator.results)
+
+            # # report also mean and standard deviation among all subjects
+            # result_summary_file = os.path.join(self.result_dir, 'results_summary.csv')
+            # functions = {'MEAN': np.mean, 'STD': np.std}
+            # writer.CSVStatisticsWriter(result_summary_file, functions=functions).write(self.evaluator.results)
+            # print('\nAggregated statistic results...')
+            # writer.ConsoleStatisticsWriter(functions=functions).write(self.evaluator.results)
+
+            # # clear results such that the evaluator is ready for the next evaluation
+            # self.evaluator.clear()
