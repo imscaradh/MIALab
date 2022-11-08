@@ -6,6 +6,7 @@ import numpy as np
 import SimpleITK as sitk
 from sklearn import metrics
 import matplotlib.pyplot as plt
+from sklearn import preprocessing
 
 import pymia.data.conversion as conversion
 import pymia.evaluation.writer as writer
@@ -60,7 +61,10 @@ class ClassificationController():
 
         # generate feature matrix and label vector
         self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
-        self.y_train = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
+        self.y_train = preprocessing.label_binarize(
+            np.concatenate([img.feature_matrix[1] for img in images]).squeeze(),
+            classes=[1, 2, 3, 4, 5]
+        )
 
         # crawl the test image directories
         crawler = futil.FileSystemDataCrawler(data_test_dir,
@@ -113,14 +117,14 @@ class ClassificationController():
                 print(' Time elapsed:', timeit.default_timer() - start_time, 's')
 
                 # convert prediction and probabilities back to SimpleITK images
-                image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
-                image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
+                # image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
+                # image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
 
                 # evaluate segmentation without post-processing
-                self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
+                # self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
-                y_true.append(sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth]))
-                y_pred.append(predictions)
+                y_true.append(sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth]).flatten())
+                y_pred.append(predictions.flatten())
                 y_pred_proba.append(probabilities)
 
     def post_process(self):
@@ -135,6 +139,7 @@ class ClassificationController():
             y_true = np.concatenate(y_true, axis=0)
             y_pred = np.concatenate(y_pred, axis=0)
             fpr, tpr, _ = metrics.roc_curve(y_true, y_pred)
+            auc = metrics.auc(y_true, y_pred)
 
             # # create ROC curve
             plt.ylabel('True Positive Rate (TPR)')
