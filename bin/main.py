@@ -33,7 +33,8 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
     ], result_dir, data_atlas_dir, data_train_dir, data_test_dir)
 
     cc.train()
-    cc.feature_importance()
+    # only do once! This takes a million years.-> only for the best configuration of parameters per classifier
+    # cc.feature_importance()
     cc.test()
     cc.post_process()
     cc.evaluate()
