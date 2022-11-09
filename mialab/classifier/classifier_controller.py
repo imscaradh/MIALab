@@ -7,6 +7,7 @@ import SimpleITK as sitk
 from sklearn import metrics
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
+from sklearn.inspection import permutation_importance
 
 import pymia.data.conversion as conversion
 import pymia.evaluation.writer as writer
@@ -73,7 +74,8 @@ class ClassificationController():
                                               futil.DataDirectoryFilter())
 
         # load images for testing and pre-process
-        self.X_test = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
+        self.X_test = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params},
+                                              multi_process=False)
 
         # initialize evaluator
         self.evaluator = putil.init_evaluator()
@@ -87,17 +89,27 @@ class ClassificationController():
             print(f' [{clf}] Time elapsed:', timeit.default_timer() - start_time, 's')
 
     def feature_importance(self):
-        print('TODO: Implement feature importance')
-        # TODO: Generalize for other classifiers
-        # CURRENTLY ONLY FOR RFC
-        # print the feature importance for the training
-        # featureLabels = ["AtlasCoordsX", "AtlasCoordsY", "AtlasCoordsZ", "T1wIntensities", "T2wIntensities", "T1WGradient",
-        #                 "T2wGradient"]
-        # featureImportancesOrdered = (-clf.feature_importances_).argsort()
-        # featureLabelsOrdered = [featureLabels[arg] for arg in featureImportancesOrdered]
-        # featureImportancePrint = ["{}: {:.4f}".format(label, value) for label, value in
-        #                         zip(featureLabelsOrdered, clf.feature_importances_[featureImportancesOrdered])]
-        # print("Feature importance in descending order:\n", featureImportancePrint)
+        # get feature matrix for test images
+        data_test = np.concatenate([img.feature_matrix[0] for img in self.X_test])
+        # get ground truth for test images
+        data_labels = preprocessing.label_binarize(
+            np.concatenate([img.feature_matrix[1] for img in self.X_test]).squeeze(),
+            classes=[1, 2, 3, 4, 5]
+        )
+        # for better readability replace features (ints) with strings
+        feature_labels = ["AtlasCoordsX", "AtlasCoordsY", "AtlasCoordsZ", "T1wIntensities", "T2wIntensities",
+                          "T1WGradient", "T2wGradient"]
+        for clf, _, _, _ in self.classifiers:
+            result = permutation_importance(clf, data_test, data_labels, random_state=42, scoring='accuracy')
+            importance_order = (-result.importances_mean).argsort()
+            labels_odered = [feature_labels[arg] for arg in importance_order]
+            means_odered = result.importances_mean[importance_order]
+            sd_ordered = result.importances_std[importance_order]
+
+            # print out at the moment, but change so that is stored in a csv...
+            printMe = ["{}: mean: {:.4f}, sd: {:.4f}".format(label, mean, sd) for label, mean, sd in
+                       zip(labels_odered, means_odered, sd_ordered)]
+            print("Feature importance in descending order:\n", printMe)
 
     def test(self):
         print('-' * 5, 'Testing...')
@@ -151,7 +163,7 @@ class ClassificationController():
             plt.show()
             plt.savefig(os.path.join(self.result_dir, clf.__name__, 'roc.png'))
 
-            #evaluation_results = self.evaluator.results
+            # evaluation_results = self.evaluator.results
             # for i, img in enumerate(self.X_test):
             #     # save results
             #     sitk.WriteImage(y_pred[i], os.path.join(self.result_dir, self.X_test[i].id_ + '_SEG.mha'), True)
