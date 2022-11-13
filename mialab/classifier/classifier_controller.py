@@ -32,7 +32,7 @@ LOADING_KEYS = [structure.BrainImageTypes.T1w,
 
 class ClassificationController():
 
-    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir):
+    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir, limit=0):
         self.classifiers = [(clf, [], [], []) for clf in classifiers]
 
         for clf in self.classifiers:
@@ -57,15 +57,19 @@ class ClassificationController():
                               'intensity_feature': True,
                               'gradient_intensity_feature': True}
 
+        if limit > 0:
+            crawler.data = dict(list(crawler.data.items())[:limit])
+
         # load images for training and pre-process
         images = putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
 
         # generate feature matrix and label vector
         self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
-        self.y_train = preprocessing.label_binarize(
-            np.concatenate([img.feature_matrix[1] for img in images]).squeeze(),
-            classes=[1, 2, 3, 4, 5]
-        )
+        self.y_train = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
+        # self.y_train = preprocessing.label_binarize(
+        #     np.concatenate([img.feature_matrix[1] for img in images]).squeeze(),
+        #     classes=[1, 2, 3, 4, 5]
+        # )
 
         # crawl the test image directories
         crawler = futil.FileSystemDataCrawler(data_test_dir,
@@ -73,20 +77,22 @@ class ClassificationController():
                                               futil.BrainImageFilePathGenerator(),
                                               futil.DataDirectoryFilter())
 
+        if limit > 0:
+            crawler.data = dict(list(crawler.data.items())[:limit])
+
         # load images for testing and pre-process
-        self.X_test = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params},
-                                              multi_process=False)
+        self.X_test = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
 
         # initialize evaluator
         self.evaluator = putil.init_evaluator()
 
     def train(self):
         for clf, _, _, _ in self.classifiers:
-            print('-' * 5, 'Training...')
+            print('-' * 5, f'Training for {clf}...')
 
             start_time = timeit.default_timer()
             clf.fit(self.X_train, self.y_train)
-            print(f' [{clf}] Time elapsed:', timeit.default_timer() - start_time, 's')
+            print(f' Time elapsed:', timeit.default_timer() - start_time, 's')
 
     def feature_importance(self):
         # get feature matrix for test images
@@ -97,8 +103,8 @@ class ClassificationController():
             classes=[1, 2, 3, 4, 5]
         )
         # for better readability replace features (ints) with strings
-        feature_labels = ["AtlasCoordsX", "AtlasCoordsY", "AtlasCoordsZ", "T1wIntensities", "T2wIntensities",
-                          "T1WGradient", "T2wGradient"]
+        feature_labels = ["AtlasCoordsX", "AtlasCoordsY", "AtlasCoordsZ", "T1wIntensities", "T2wIntensities", "T1WGradient", "T2wGradient"]
+
         for clf, _, _, _ in self.classifiers:
             result = permutation_importance(clf, data_test, data_labels, random_state=42, scoring='accuracy')
             importance_order = (-result.importances_mean).argsort()
@@ -112,14 +118,8 @@ class ClassificationController():
             print("Feature importance in descending order:\n", printMe)
 
     def test(self):
-        print('-' * 5, 'Testing...')
-
-        # create a result directory with timestamp
-        t = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        result_dir = os.path.join(self.result_dir, t)
-        os.makedirs(result_dir, exist_ok=True)
-
         for clf, y_true, y_pred, y_pred_proba in self.classifiers:
+            print('-' * 5, f'Testing with {clf}...')
             for img in self.X_test:
                 print('-' * 10, 'Testing', img.id_)
 
@@ -128,40 +128,53 @@ class ClassificationController():
                 probabilities = clf.predict_proba(img.feature_matrix[0])
                 print(' Time elapsed:', timeit.default_timer() - start_time, 's')
 
-                # convert prediction and probabilities back to SimpleITK images
-                # image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
+                image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
+                image_reference = img.images[structure.BrainImageTypes.GroundTruth]
                 # image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
 
                 # evaluate segmentation without post-processing
                 # self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
-                y_true.append(sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth]).flatten())
-                y_pred.append(predictions.flatten())
+                prediction_array = sitk.GetArrayFromImage(image_prediction)
+                reference_array = sitk.GetArrayFromImage(image_reference)
+
+                y_true.append(reference_array)
+                y_pred.append(prediction_array)
                 y_pred_proba.append(probabilities)
 
     def post_process(self):
         # post-process segmentation and evaluate with post-processing
-        # post_process_params = {'simple_post': True}
-        # images_post_processed = putil.post_process_batch(images_test, images_prediction, images_probabilities,
-        #                                                  post_process_params, multi_process=True)
+        # images_post_processed = putil.post_process_batch(images_test, images_prediction, images_probabilities, {'simple_post': True}, multi_process=True)
         pass
 
     def evaluate(self):
         for clf, y_true, y_pred, y_pred_proba in self.classifiers:
-            y_true = np.concatenate(y_true, axis=0)
-            y_pred = np.concatenate(y_pred, axis=0)
-            fpr, tpr, _ = metrics.roc_curve(y_true, y_pred)
-            auc = metrics.auc(y_true, y_pred)
+            y_true_label = []
+            y_pred_label = []
 
-            # # create ROC curve
+            for label, label_str in putil.labels.items():
+                for reference_array in y_true:
+                    y_true_label = np.concatenate((y_true_label, np.in1d(reference_array.ravel(), label, True).reshape(reference_array.shape).astype(np.uint8).ravel()), axis=0)
+
+                for prediction_array in y_pred:
+                    y_pred_label = np.concatenate((y_pred_label, np.in1d(prediction_array.ravel(), label, True).reshape(prediction_array.shape).astype(np.uint8).ravel()), axis=0)
+
+                fpr, tpr, _ = metrics.roc_curve(y_true_label, y_pred_label)
+                # auc = metrics.auc(y_true_label, y_pred_label)
+
+                # # create ROC curve
+                plt.plot(fpr, tpr, label=f'Label={label_str}')
+
             plt.ylabel('True Positive Rate (TPR)')
             plt.xlabel('False Positive Rate (FPR)')
-
-            plt.plot(fpr, tpr, label=f'AUC={auc}')
             plt.legend(loc=4)
 
-            plt.show()
-            plt.savefig(os.path.join(self.result_dir, clf.__name__, 'roc.png'))
+            # create a result directory with timestamp
+            t = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            output_dir = os.path.join(self.result_dir, t)
+            os.makedirs(output_dir, exist_ok=True)
+
+            plt.savefig(os.path.join(output_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
 
             # evaluation_results = self.evaluator.results
             # for i, img in enumerate(self.X_test):

@@ -9,7 +9,12 @@ import sys
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 
-from mialab.classifier.classifier_controller import ClassificationController
+try:
+    from mialab.classifier.classifier_controller import ClassificationController
+except ImportError:
+    # Append the MIALab root directory to Python path
+    sys.path.insert(0, os.path.join(os.path.dirname(sys.argv[0]), '..'))
+    from mialab.classifier.classifier_controller import ClassificationController
 
 
 def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_dir: str):
@@ -33,7 +38,7 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
     ], result_dir, data_atlas_dir, data_train_dir, data_test_dir)
 
     cc.train()
-    cc.feature_importance()
+    # cc.feature_importance()
     cc.test()
     cc.post_process()
     cc.evaluate()

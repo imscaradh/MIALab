@@ -20,6 +20,14 @@ import mialab.utilities.multi_processor as mproc
 atlas_t1 = sitk.Image()
 atlas_t2 = sitk.Image()
 
+# define the labels to evaluate
+labels = {1: 'WhiteMatter',
+          2: 'GreyMatter',
+          3: 'Hippocampus',
+          4: 'Amygdala',
+          5: 'Thalamus'
+          }
+
 
 def load_atlas_images(directory: str):
     """Loads the T1 and T2 atlas images.
@@ -293,15 +301,6 @@ def init_evaluator() -> eval_.Evaluator:
 
     # initialize metrics
     metrics = [metric.DiceCoefficient(), metric.HausdorffDistance(percentile=95.0), metric.TruePositive(), metric.TrueNegative()]
-
-    # define the labels to evaluate
-    labels = {1: 'WhiteMatter',
-              2: 'GreyMatter',
-              3: 'Hippocampus',
-              4: 'Amygdala',
-              5: 'Thalamus'
-              }
-
     evaluator = eval_.SegmentationEvaluator(metrics, labels)
     return evaluator
 
