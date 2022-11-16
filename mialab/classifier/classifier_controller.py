@@ -2,15 +2,14 @@ import datetime
 import os
 import sys
 import timeit
-import numpy as np
-import SimpleITK as sitk
-from sklearn import metrics
-import matplotlib.pyplot as plt
-from sklearn import preprocessing
-from sklearn.inspection import permutation_importance
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pymia.data.conversion as conversion
 import pymia.evaluation.writer as writer
+import SimpleITK as sitk
+from sklearn import metrics, preprocessing
+from sklearn.inspection import permutation_importance
 
 try:
     import mialab.data.structure as structure
@@ -33,7 +32,7 @@ LOADING_KEYS = [structure.BrainImageTypes.T1w,
 class ClassificationController():
 
     def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir, limit=0):
-        self.classifiers = [(clf, [], [], []) for clf in classifiers]
+        self.classifiers = [(clf, []) for clf in classifiers]
 
         for clf in self.classifiers:
             print(f'Classifier: {clf}')
@@ -66,11 +65,6 @@ class ClassificationController():
         # generate feature matrix and label vector
         self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
         self.y_train = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
-        # self.y_train = preprocessing.label_binarize(
-        #     np.concatenate([img.feature_matrix[1] for img in images]).squeeze(),
-        #     classes=[1, 2, 3, 4, 5]
-        # )
-
         # crawl the test image directories
         crawler = futil.FileSystemDataCrawler(data_test_dir,
                                               LOADING_KEYS,
@@ -81,13 +75,15 @@ class ClassificationController():
             crawler.data = dict(list(crawler.data.items())[:limit])
 
         # load images for testing and pre-process
-        self.X_test = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
+        images = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
+        self.X_test = np.concatenate([img.feature_matrix[0] for img in images])
+        self.y_true = np.concatenate([img.images[structure.BrainImageTypes.GroundTruth] for img in images])  # WTF
 
         # initialize evaluator
         self.evaluator = putil.init_evaluator()
 
     def train(self):
-        for clf, _, _, _ in self.classifiers:
+        for clf, _ in self.classifiers:
             print('-' * 5, f'Training for {clf}...')
 
             start_time = timeit.default_timer()
@@ -105,7 +101,7 @@ class ClassificationController():
         # for better readability replace features (ints) with strings
         feature_labels = ["AtlasCoordsX", "AtlasCoordsY", "AtlasCoordsZ", "T1wIntensities", "T2wIntensities", "T1WGradient", "T2wGradient"]
 
-        for clf, _, _, _ in self.classifiers:
+        for clf, _ in self.classifiers:
             result = permutation_importance(clf, data_test, data_labels, random_state=42, scoring='accuracy')
             importance_order = (-result.importances_mean).argsort()
             labels_odered = [feature_labels[arg] for arg in importance_order]
@@ -118,29 +114,33 @@ class ClassificationController():
             print("Feature importance in descending order:\n", printMe)
 
     def test(self):
-        for clf, y_true, y_pred, y_pred_proba in self.classifiers:
+        for clf, y_pred in self.classifiers:
             print('-' * 5, f'Testing with {clf}...')
-            for img in self.X_test:
-                print('-' * 10, 'Testing', img.id_)
+            y_pred.append(clf.predict(self.X_test))  # TODO: Move away from list structure
 
-                start_time = timeit.default_timer()
-                predictions = clf.predict(img.feature_matrix[0])
-                probabilities = clf.predict_proba(img.feature_matrix[0])
-                print(' Time elapsed:', timeit.default_timer() - start_time, 's')
+            # for img in self.X_test:
+            #     print('-' * 10, 'Testing', img.id_)
 
-                image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
-                image_reference = img.images[structure.BrainImageTypes.GroundTruth]
-                # image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
+            #     start_time = timeit.default_timer()
+            #     predictions = clf.predict(img.feature_matrix[0])
+            #     probabilities = clf.predict_proba(img.feature_matrix[0])
 
-                # evaluate segmentation without post-processing
-                # self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
+            #     print(f'{" " * 10} Time for prediction elapsed: {timeit.default_timer() - start_time:.2f}s')
 
-                prediction_array = sitk.GetArrayFromImage(image_prediction)
-                reference_array = sitk.GetArrayFromImage(image_reference)
+            #     image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
+            #     image_reference = img.images[structure.BrainImageTypes.GroundTruth]
+            #     # image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
 
-                y_true.append(reference_array)
-                y_pred.append(prediction_array)
-                y_pred_proba.append(probabilities)
+            #     prediction_array = sitk.GetArrayFromImage(image_prediction)
+            #     reference_array = sitk.GetArrayFromImage(image_reference)
+            #     # probabilities_array = sitk.GetArrayFromImage(image_probabilities)
+
+            #     y_true.append(reference_array)
+            #     y_pred.append(prediction_array)
+            # y_pred_proba.append(probabilities_array)
+
+            # evaluate segmentation without post-processing
+            # self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
     def post_process(self):
         # post-process segmentation and evaluate with post-processing
@@ -148,22 +148,28 @@ class ClassificationController():
         pass
 
     def evaluate(self):
-        for clf, y_true, y_pred, y_pred_proba in self.classifiers:
-            y_true_label = []
-            y_pred_label = []
+        for clf, y_pred in self.classifiers:
 
             for label, label_str in putil.labels.items():
-                for reference_array in y_true:
-                    y_true_label = np.concatenate((y_true_label, np.in1d(reference_array.ravel(), label, True).reshape(reference_array.shape).astype(np.uint8).ravel()), axis=0)
+                fpr1, tpr1, _ = metrics.roc_curve(self.y_true, np.concatenate(y_pred, axis=0), pos_label=label)
+                plt.plot(fpr1, tpr1, label=label_str)
 
-                for prediction_array in y_pred:
-                    y_pred_label = np.concatenate((y_pred_label, np.in1d(prediction_array.ravel(), label, True).reshape(prediction_array.shape).astype(np.uint8).ravel()), axis=0)
+            # y_true_label = np.array([])
+            # y_pred_label = np.array([])
 
-                fpr, tpr, _ = metrics.roc_curve(y_true_label, y_pred_label)
-                # auc = metrics.auc(y_true_label, y_pred_label)
+            # for label, label_str in putil.labels.items():
+            #     reference_of_label = np.in1d(reference_array.ravel(), label, True).reshape(reference_array.shape).astype(np.uint8)
+            #     prediction_of_label = np.in1d(prediction_array.ravel(), label, True).reshape(prediction_array.shape).astype(np.uint8)
 
-                # # create ROC curve
-                plt.plot(fpr, tpr, label=f'Label={label_str}')
+            #     for reference_array in y_true:
+            #         y_true_label = np.concatenate((y_true_label, np.in1d(reference_array.ravel(), label, True).flatten()), axis=0)
+            #     for prediction_array in y_pred:
+            #         y_pred_label = np.concatenate((y_pred_label, np.in1d(prediction_array.ravel(), label, True).flatten()), axis=0)
+
+            #     fpr, tpr, _ = metrics.roc_curve(y_true_label, y_pred_label)
+
+            #     # Create ROC curve
+            #     plt.plot(fpr, tpr, label=label_str)
 
             plt.ylabel('True Positive Rate (TPR)')
             plt.xlabel('False Positive Rate (FPR)')
