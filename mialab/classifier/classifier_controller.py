@@ -175,7 +175,13 @@ class ClassificationController():
         pass
 
     def evaluate(self):
+        # create a result directory with timestamp
+        t = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        output_dir = os.path.join(self.result_dir, t)
+        os.makedirs(output_dir, exist_ok=True)
+
         for clf, y_pred, _ in self.classifiers:
+            print('-' * 5, f'Evaluation for {clf.__class__.__name__}...')
             y_pred = np.concatenate(y_pred, axis=0).flatten()
 
             for label, label_str in putil.labels.items():
@@ -185,19 +191,14 @@ class ClassificationController():
 
                 # AUC
                 auc = metrics.auc(fpr, tpr)
-                print(f'AUC for label {label_str}: {auc:.2f}')
+                print(f'{"-" * 10} AUC for label {label_str}: {auc:.2f}')
                 
-
             plt.ylabel('True Positive Rate (TPR)')
             plt.xlabel('False Positive Rate (FPR)')
             plt.legend(loc=4)
 
-            # create a result directory with timestamp
-            t = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-            output_dir = os.path.join(self.result_dir, t)
-            os.makedirs(output_dir, exist_ok=True)
-
             plt.savefig(os.path.join(output_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
+            plt.clf()
 
             # evaluation_results = self.evaluator.results
             # for i, img in enumerate(self.X_test):

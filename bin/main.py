@@ -8,6 +8,7 @@ import sys
 
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
+import sklearn.ensemble as sk_ensemble
 
 try:
     from mialab.classifier.classifier_controller import ClassificationController
@@ -34,7 +35,7 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
 
     cc = ClassificationController([
         KNeighborsClassifier(n_neighbors=1, weights='distance'),
-        # sk_ensemble.RandomForestClassifier(max_features=images[0].feature_matrix[0].shape[1], n_estimators=10, max_depth=10)
+        sk_ensemble.RandomForestClassifier(max_features=7, n_estimators=10, max_depth=10)
     ], result_dir, data_atlas_dir, data_train_dir, data_test_dir, limit=1)
 
     cc.train()
