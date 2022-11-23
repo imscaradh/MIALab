@@ -63,6 +63,7 @@ class ClassificationController():
         # generate feature matrix and label vector
         self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
         self.y_train = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
+        
         # crawl the test image directories
         crawler = futil.FileSystemDataCrawler(data_test_dir,
                                               LOADING_KEYS,
@@ -73,12 +74,11 @@ class ClassificationController():
             crawler.data = dict(list(crawler.data.items())[:limit])
 
         # load images for testing and pre-process
-        images = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
-        self.X_test = np.concatenate([img.feature_matrix[0] for img in images])
+        self.X_test = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
         self.y_true = np.concatenate([img.images[structure.BrainImageTypes.GroundTruth] for img in images])  # WTF
 
         # initialize evaluator
-        self.evaluator = putil.init_evaluator()
+        # self.evaluator = putil.init_evaluator()
 
     def train(self):
         for clf, _, _ in self.classifiers:
