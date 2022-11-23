@@ -9,6 +9,7 @@ import sys
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 import sklearn.ensemble as sk_ensemble
+from sklearn.model_selection import GridSearchCV
 
 try:
     from mialab.classifier.classifier_controller import ClassificationController
@@ -33,6 +34,15 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
         - Evaluation of the segmentation
     """
 
+    # parameters for grid search
+    params_rfc = {'n_estimators':(), 'max_features':(), 'max_depth' : ()}
+    params_knn = {'n_neighbors': (), 'weights': ()}
+    params_svc = {'kernel': ('linear', 'rbf'), 'C':()}
+
+    rfc = GridSearchCV(sk_ensemble.RandomForestClassifier, params_rfc)
+    knn = GridSearchCV(KNeighborsClassifier, params_knn)
+
+    # replace classifiers with variables above
     cc = ClassificationController([
         KNeighborsClassifier(n_neighbors=1, weights='distance'),
         sk_ensemble.RandomForestClassifier(max_features=7, n_estimators=10, max_depth=10)
