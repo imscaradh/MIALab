@@ -69,7 +69,7 @@ class ClassificationController():
         # generate feature matrix and label vector
         self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
         self.y_train = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
-        
+
         # crawl the test image directories
         crawler = futil.FileSystemDataCrawler(data_test_dir,
                                               LOADING_KEYS,
@@ -90,7 +90,7 @@ class ClassificationController():
         self.y_true = np.concatenate([img.images[structure.BrainImageTypes.GroundTruth] for img in images])  # WTF
 
         # initialize evaluator
-        # self.evaluator = putil.init_evaluator()
+        self.evaluator = putil.init_evaluator()
 
     def _preload_data(self, file_name, data_loader):
         if not os.path.exists(file_name):
@@ -105,7 +105,6 @@ class ClassificationController():
         data = pickle.load(file)
         file.close()
         return data
-        
 
     def train(self):
         for clf, _, _ in self.classifiers:
@@ -156,7 +155,7 @@ class ClassificationController():
                 predictions = clf.predict(img.feature_matrix[0])
                 probabilities = clf.predict_proba(img.feature_matrix[0])
 
-                print(f'{" " * 10} Time for prediction elapsed: {timeit.default_timer() - start_time:.2f}s')
+                print(f'Time for prediction elapsed: {timeit.default_timer() - start_time:.2f}s')
 
                 image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
                 image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
@@ -168,7 +167,20 @@ class ClassificationController():
                 y_pred_proba.append(probabilities_array)
 
             # evaluate segmentation without post-processing
-            # self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
+            self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
+
+
+            # TODO: Move those metrics to evaluate()
+            # use two writers to report the results
+            print(f'{"-" * 10} Subject-wise results for {clf.__class__.__name__}...')
+            writer.ConsoleWriter().write(self.evaluator.results)
+
+            # report also mean and standard deviation among all subjects
+            print(f'{"-" * 10} Aggregated statistic results for {clf.__class__.__name__}...')
+            writer.ConsoleStatisticsWriter(functions={'MEAN': np.mean, 'STD': np.std}).write(self.evaluator.results)
+
+            # clear results such that the evaluator is ready for the next evaluation
+            self.evaluator.clear()
 
     def post_process(self):
         """ This is not part of our project """
@@ -192,33 +204,10 @@ class ClassificationController():
                 # AUC
                 auc = metrics.auc(fpr, tpr)
                 print(f'{"-" * 10} AUC for label {label_str}: {auc:.2f}')
-                
+
             plt.ylabel('True Positive Rate (TPR)')
             plt.xlabel('False Positive Rate (FPR)')
             plt.legend(loc=4)
 
             plt.savefig(os.path.join(output_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
             plt.clf()
-
-            # evaluation_results = self.evaluator.results
-            # for i, img in enumerate(self.X_test):
-            #     # save results
-            #     sitk.WriteImage(y_pred[i], os.path.join(self.result_dir, self.X_test[i].id_ + '_SEG.mha'), True)
-
-            # # use two writers to report the results
-            # os.makedirs(self.result_dir, exist_ok=True)  # generate result directory, if it does not exists
-            # result_file = os.path.join(self.result_dir, 'results.csv')
-            # writer.CSVWriter(result_file).write(self.evaluator.results)
-
-            # print('\nSubject-wise results...')
-            # writer.ConsoleWriter().write(self.evaluator.results)
-
-            # # report also mean and standard deviation among all subjects
-            # result_summary_file = os.path.join(self.result_dir, 'results_summary.csv')
-            # functions = {'MEAN': np.mean, 'STD': np.std}
-            # writer.CSVStatisticsWriter(result_summary_file, functions=functions).write(self.evaluator.results)
-            # print('\nAggregated statistic results...')
-            # writer.ConsoleStatisticsWriter(functions=functions).write(self.evaluator.results)
-
-            # # clear results such that the evaluator is ready for the next evaluation
-            # self.evaluator.clear()
