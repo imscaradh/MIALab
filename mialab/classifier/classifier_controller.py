@@ -2,6 +2,7 @@ import datetime
 import os
 import sys
 import timeit
+import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,7 +33,7 @@ LOADING_KEYS = [structure.BrainImageTypes.T1w,
 
 class ClassificationController():
 
-    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir, limit=0):
+    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir, limit=0, preload_data=True):
         self.classifiers = [(clf, [], []) for clf in classifiers]
 
         self.result_dir = result_dir
@@ -58,7 +59,12 @@ class ClassificationController():
             crawler.data = dict(list(crawler.data.items())[:limit])
 
         # load images for training and pre-process
-        images = putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
+        def data_train_loader(): return putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
+
+        if preload_data:
+            images = self._preload_data('train_preprocessed.pyo', data_train_loader)
+        else:
+            images = data_train_loader()
 
         # generate feature matrix and label vector
         self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
@@ -74,11 +80,32 @@ class ClassificationController():
             crawler.data = dict(list(crawler.data.items())[:limit])
 
         # load images for testing and pre-process
-        self.X_test = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
+        def data_test_loader(): return putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
+
+        if preload_data:
+            self.X_test = self._preload_data('test_preprocessed.pyo', data_test_loader)
+        else:
+            self.X_test = data_test_loader()
+
         self.y_true = np.concatenate([img.images[structure.BrainImageTypes.GroundTruth] for img in images])  # WTF
 
         # initialize evaluator
         # self.evaluator = putil.init_evaluator()
+
+    def _preload_data(self, file_name, data_loader):
+        if not os.path.exists(file_name):
+            print(f'File {file_name} does not exist, dumping...')
+            file = open(file_name, 'wb')
+            pickle.dump(data_loader(), file)
+            file.close()
+        else:
+            print(f'File {file_name} found, loading...')
+
+        file = open(file_name, 'rb')
+        data = pickle.load(file)
+        file.close()
+        return data
+        
 
     def train(self):
         for clf, _, _ in self.classifiers:
@@ -140,23 +167,26 @@ class ClassificationController():
                 y_pred.append(prediction_array)
                 y_pred_proba.append(probabilities_array)
 
-            # y_pred.append(clf.predict(self.X_test))  # TODO: Move away from list structure
-
             # evaluate segmentation without post-processing
             # self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
     def post_process(self):
-        # post-process segmentation and evaluate with post-processing
-        # images_post_processed = putil.post_process_batch(images_test, images_prediction, images_probabilities, {'simple_post': True}, multi_process=True)
+        """ This is not part of our project """
         pass
 
     def evaluate(self):
         for clf, y_pred, _ in self.classifiers:
-            y_pred = np.concatenate(y_pred, axis=0)
+            y_pred = np.concatenate(y_pred, axis=0).flatten()
 
             for label, label_str in putil.labels.items():
+                # ROC
                 fpr, tpr, _ = metrics.roc_curve(self.y_true, y_pred, pos_label=label)
                 plt.plot(fpr, tpr, label=label_str)
+
+                # AUC
+                auc = metrics.auc(fpr, tpr)
+                print(f'AUC for label {label_str}: {auc:.2f}')
+                
 
             plt.ylabel('True Positive Rate (TPR)')
             plt.xlabel('False Positive Rate (FPR)')
