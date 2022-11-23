@@ -10,6 +10,7 @@ import pymia.evaluation.writer as writer
 import SimpleITK as sitk
 from sklearn import metrics, preprocessing
 from sklearn.inspection import permutation_importance
+import csv
 
 try:
     import mialab.data.structure as structure
@@ -95,20 +96,27 @@ class ClassificationController():
             np.concatenate([img.feature_matrix[1] for img in self.X_test]).squeeze(),
             classes=[1, 2, 3, 4, 5]
         )
-        # for better readability replace features (ints) with strings
-        feature_labels = ["AtlasCoordsX", "AtlasCoordsY", "AtlasCoordsZ", "T1wIntensities", "T2wIntensities", "T1WGradient", "T2wGradient"]
+        header = ["classifier", "atlas_x", "atlas_y", "atlas_z", "T1w_intensity", "T2w_intensity",
+                  "T1w_gradient", "T2w_gradient"]
 
-        for clf, _, _ in self.classifiers:
-            result = permutation_importance(clf, data_test, data_labels, random_state=42, scoring='accuracy')
-            importance_order = (-result.importances_mean).argsort()
-            labels_odered = [feature_labels[arg] for arg in importance_order]
-            means_odered = result.importances_mean[importance_order]
-            sd_ordered = result.importances_std[importance_order]
+        # prepare csv to store results
+        os.makedirs(self.result_dir, exist_ok=True)  # generate result directory, if it does not exists
+        with open(os.path.join(self.result_dir, 'feature_importances.csv'), 'w') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
 
-            # print out at the moment, but change so that is stored in a csv...
-            printMe = ["{}: mean: {:.4f}, sd: {:.4f}".format(label, mean, sd) for label, mean, sd in
-                       zip(labels_odered, means_odered, sd_ordered)]
-            print("Feature importance in descending order:\n", printMe)
+            for clf, _, _ in self.classifiers:
+                result = permutation_importance(clf, data_test, data_labels, random_state=42, scoring='accuracy')
+
+                means_list = result.importances_mean.tolist()
+                # add classifier configuration as first column
+                means_list.insert(0, clf)
+                writer.writerow(means_list)
+
+                sd_list = result.importances_std.tolist()
+                # add classfier configuration as first column
+                sd_list.insert(0, clf)
+                writer.writerow(sd_list)
 
     def test(self):
         for clf, y_pred, y_pred_proba in self.classifiers:
