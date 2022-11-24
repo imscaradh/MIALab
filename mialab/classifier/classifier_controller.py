@@ -59,6 +59,7 @@ class ClassificationController():
             crawler.data = dict(list(crawler.data.items())[:limit])
 
         # load images for training and pre-process
+        # images = putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
         def data_train_loader(): return putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
 
         if preload_data:
@@ -80,6 +81,7 @@ class ClassificationController():
             crawler.data = dict(list(crawler.data.items())[:limit])
 
         # load images for testing and pre-process
+        # images = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
         def data_test_loader(): return putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
 
         if preload_data:
