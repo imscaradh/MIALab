@@ -89,7 +89,9 @@ class ClassificationController():
         else:
             self.X_test = data_test_loader()
 
-        self.y_true = np.concatenate([img.images[structure.BrainImageTypes.GroundTruth] for img in images])  # WTF
+        # self.y_true = np.concatenate([img.images[structure.BrainImageTypes.GroundTruth] for img in images])  # WTF
+        self.y_true = np.concatenate([sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth])
+                                      for img in self.X_test]).flatten()
 
         # initialize evaluator
         self.evaluator = putil.init_evaluator()

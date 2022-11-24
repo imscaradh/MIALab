@@ -35,25 +35,17 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
         - Evaluation of the segmentation
     """
 
-    # parameters for grid search
-    params_rfc = {'n_estimators': [5, 15], 'max_features': [5,15], 'max_depth': [5,15]}
-    params_knn = {'n_neighbors': [1,10], 'weights': ('uniform', 'distance')}
-    params_svc = {'kernel': ('linear', 'rbf', 'poly', 'sigmoid'), 'C': [1,10],'gamma' : ('auto', 'scale')}
-
-    rfc = GridSearchCV(sk_ensemble.RandomForestClassifier, params_rfc)
-    knn = GridSearchCV(KNeighborsClassifier, params_knn)
-    svc = GridSearchCV(SVC, params_svc)
-
-    # replace classifiers with variables above
     cc = ClassificationController([
-        rfc, knn
+        KNeighborsClassifier(n_neighbors=1, weights='distance'),
+        sk_ensemble.RandomForestClassifier(max_features=7, n_estimators=10,max_depth=10)
     ], result_dir, data_atlas_dir, data_train_dir, data_test_dir, limit=1)
+
 
     cc.train()
     # cc.feature_importance()
-    # cc.test()
-    # cc.post_process()
-    # cc.evaluate()
+    cc.test()
+    cc.post_process()
+    cc.evaluate()
 
 
 if __name__ == "__main__":
