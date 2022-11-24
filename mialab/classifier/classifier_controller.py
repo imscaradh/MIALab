@@ -93,15 +93,16 @@ class ClassificationController():
         self.evaluator = putil.init_evaluator()
 
     def _preload_data(self, file_name, data_loader):
+        abs_name = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', file_name)
         if not os.path.exists(file_name):
             print(f'File {file_name} does not exist, dumping...')
-            file = open(file_name, 'wb')
+            file = open(abs_name, 'wb')
             pickle.dump(data_loader(), file)
             file.close()
         else:
             print(f'File {file_name} found, loading...')
 
-        file = open(file_name, 'rb')
+        file = open(abs_name, 'rb')
         data = pickle.load(file)
         file.close()
         return data
