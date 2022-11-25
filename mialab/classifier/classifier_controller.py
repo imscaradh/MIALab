@@ -11,7 +11,9 @@ import pymia.evaluation.writer as writer
 import SimpleITK as sitk
 from sklearn import metrics, preprocessing
 from sklearn.inspection import permutation_importance
+from sklearn.model_selection import GridSearchCV
 import csv
+import pandas as pd
 
 try:
     import mialab.data.structure as structure
@@ -33,8 +35,9 @@ LOADING_KEYS = [structure.BrainImageTypes.T1w,
 
 class ClassificationController():
 
-    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir, limit=0, preload_data=True):
+    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir, params, limit=0, preload_data=True):
         self.classifiers = [(clf, [], []) for clf in classifiers]
+        self.params = params
 
         self.result_dir = result_dir
         self.data_atlas_dir = data_atlas_dir
@@ -125,12 +128,17 @@ class ClassificationController():
         return data
 
     def train(self):
-        for clf, _, _ in self.classifiers:
+        for n, clf in enumerate(self.classifiers):
             print('-' * 5, f'Training for {clf.__class__.__name__}...')
-
+            clf, _, _ = clf
+            clf = GridSearchCV(clf, self.params[n], scoring=('accuracy'), verbose=2)
             start_time = timeit.default_timer()
             clf.fit(self.X_train, self.y_train)
             print(f' Time elapsed: {timeit.default_timer() - start_time:.2f}s')
+            sorted(clf.cv_results_.keys())
+            df = pd.DataFrame(clf.cv_results_)
+            df.to_csv('stats.csv', index=False)
+            print("hi")
 
     def feature_importance(self):
         # get feature matrix for test images
