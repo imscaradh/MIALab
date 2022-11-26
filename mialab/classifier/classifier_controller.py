@@ -33,15 +33,17 @@ LOADING_KEYS = [structure.BrainImageTypes.T1w,
                 structure.BrainImageTypes.RegistrationTransform]  # the list of data we will load
 
 
-class ClassificationController():
+class ClassificationController:
 
-    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir, data_test_dir, params, limit=0, preload_data=True):
+    def __init__(self, classifiers: list, result_dir, data_atlas_dir, data_train_dir,
+                 data_test_dir, params, limit=0, preload_data=True):
         self.classifiers = [(clf, [], []) for clf in classifiers]
         self.params = params
 
-        def create_result_dir(result_dir):
+        def create_result_dir(_result_dir):
+            """create a result directory with timestamp"""
             t = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-            output_dir = os.path.join(result_dir, t)
+            output_dir = os.path.join(_result_dir, t)
             os.makedirs(output_dir, exist_ok=True)
             return output_dir
 
@@ -69,7 +71,8 @@ class ClassificationController():
 
         # load images for training and pre-process
         # images = putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
-        def data_train_loader(): return putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
+        def data_train_loader():
+            return putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
 
         if preload_data:
             images = self._preload_data('train_preprocessed.pyo', data_train_loader)
@@ -91,7 +94,8 @@ class ClassificationController():
 
         # load images for testing and pre-process
         # images = putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
-        def data_test_loader(): return putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
+        def data_test_loader():
+            return putil.pre_process_batch(crawler.data, {'training': False, **pre_process_params}, multi_process=False)
 
         if preload_data:
             self.X_test = self._preload_data('test_preprocessed.pyo', data_test_loader)
@@ -104,7 +108,6 @@ class ClassificationController():
 
         # initialize evaluator
         self.evaluator = putil.init_evaluator()
-
 
     def _preload_data(self, file_name, data_loader):
         def _dump():
@@ -131,14 +134,14 @@ class ClassificationController():
             print("Incomplete dumps, retrying...")
             _dump()
             data = _load()
-        
+
         return data
 
     def train(self):
         for n, clf in enumerate(self.classifiers):
             clf, _, _ = clf
             print('-' * 5, f'Training for {clf.__class__.__name__}...')
-            clf = GridSearchCV(clf, self.params[n], cv=5,  scoring=('accuracy'), verbose=2, refit=True)
+            clf = GridSearchCV(clf, self.params[n], cv=5, scoring='accuracy', verbose=2, refit=True)
             start_time = timeit.default_timer()
             # todo: Disable warning or find cause. Warning occurs when KNN weights = 'uniform'
             # FutureWarning: Unlike other reduction functions (e.g. `skew`, `kurtosis`), the default behavior of `mode`
@@ -146,13 +149,14 @@ class ClassificationController():
             # of `keepdims` will become False, the `axis` over which the statistic is taken will be eliminated, and the
             # value None will no longer be accepted. Set `keepdims` to True or False to avoid this warning.
             # mode, _ = stats.mode(_y[neigh_ind, k], axis=1)
+            # problem: problem is in read only file of the pipeline
             clf.fit(self.X_train, self.y_train)
             print(f' Time elapsed: {timeit.default_timer() - start_time:.2f}s')
             df = pd.DataFrame(clf.cv_results_)
-            filename = (f'gridsearch_{clf.best_estimator_.__class__.__name__.lower()}.csv')
+            filename = f'gridsearch_{clf.best_estimator_.__class__.__name__.lower()}.csv'
             save_to = os.path.join(self.result_dir, filename)
             df.to_csv(save_to, index=False)
-            self.classifiers[n] = (clf.best_estimator_, [],[])
+            self.classifiers[n] = (clf.best_estimator_, [], [])
 
     def feature_importance(self):
         # get feature matrix for test images
@@ -166,9 +170,9 @@ class ClassificationController():
                   "T1w_gradient", "T2w_gradient"]
 
         # prepare csv to store results
-        with open(os.path.join(self.result_dir, 'feature_importances.csv'), 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
+        with open(os.path.join(self.result_dir, 'feature_importance.csv'), 'w') as f:
+            _writer = csv.writer(f)
+            _writer.writerow(header)
 
             for clf, _, _ in self.classifiers:
                 result = permutation_importance(clf, data_test, data_labels, random_state=42, scoring='accuracy')
@@ -176,12 +180,12 @@ class ClassificationController():
                 means_list = result.importances_mean.tolist()
                 # add classifier configuration as first column
                 means_list.insert(0, clf)
-                writer.writerow(means_list)
+                _writer.writerow(means_list)
 
                 sd_list = result.importances_std.tolist()
-                # add classfier configuration as first column
+                # add classifier configuration as first column
                 sd_list.insert(0, clf)
-                writer.writerow(sd_list)
+                _writer.writerow(sd_list)
 
     def test(self):
         for clf, y_pred, y_pred_proba in self.classifiers:
@@ -193,10 +197,12 @@ class ClassificationController():
                 start_time = timeit.default_timer()
                 predictions = clf.predict(img.feature_matrix[0])
                 probabilities = clf.predict_proba(img.feature_matrix[0])
-
+                # todo: find why KNN takes soooo long (>450s vs. <100 when not with gridSearch)
+                #  maybe because weights='uniform'?
                 print(f'Time for prediction elapsed: {timeit.default_timer() - start_time:.2f}s')
 
-                image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8), img.image_properties)
+                image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8),
+                                                                                img.image_properties)
                 image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
 
                 prediction_array = sitk.GetArrayFromImage(image_prediction)
@@ -207,7 +213,6 @@ class ClassificationController():
 
             # evaluate segmentation without post-processing
             self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
-
 
             # TODO: Move those metrics to evaluate()
             # use two writers to report the results
@@ -226,11 +231,6 @@ class ClassificationController():
         pass
 
     def evaluate(self):
-        # create a result directory with timestamp
-        t = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        output_dir = os.path.join(self.result_dir, t)
-        os.makedirs(output_dir, exist_ok=True)
-
         for clf, y_pred, _ in self.classifiers:
             print('-' * 5, f'Evaluation for {clf.__class__.__name__}...')
             y_pred = np.concatenate(y_pred, axis=0).flatten()
