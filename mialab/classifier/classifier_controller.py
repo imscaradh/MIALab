@@ -39,7 +39,13 @@ class ClassificationController():
         self.classifiers = [(clf, [], []) for clf in classifiers]
         self.params = params
 
-        self.result_dir = result_dir
+        def create_result_dir(result_dir):
+            t = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            output_dir = os.path.join(result_dir, t)
+            os.makedirs(output_dir, exist_ok=True)
+            return output_dir
+
+        self.result_dir = create_result_dir(result_dir)
         self.data_atlas_dir = data_atlas_dir
 
         # load atlas images
@@ -99,6 +105,7 @@ class ClassificationController():
         # initialize evaluator
         self.evaluator = putil.init_evaluator()
 
+
     def _preload_data(self, file_name, data_loader):
         def _dump():
             file = open(abs_name, 'wb')
@@ -129,16 +136,23 @@ class ClassificationController():
 
     def train(self):
         for n, clf in enumerate(self.classifiers):
-            print('-' * 5, f'Training for {clf.__class__.__name__}...')
             clf, _, _ = clf
-            clf = GridSearchCV(clf, self.params[n], scoring=('accuracy'), verbose=2)
+            print('-' * 5, f'Training for {clf.__class__.__name__}...')
+            clf = GridSearchCV(clf, self.params[n], cv=5,  scoring=('accuracy'), verbose=2, refit=True)
             start_time = timeit.default_timer()
+            # todo: Disable warning or find cause. Warning occurs when KNN weights = 'uniform'
+            # FutureWarning: Unlike other reduction functions (e.g. `skew`, `kurtosis`), the default behavior of `mode`
+            # typically preserves the axis it acts along. In SciPy 1.11.0, this behavior will change: the default value
+            # of `keepdims` will become False, the `axis` over which the statistic is taken will be eliminated, and the
+            # value None will no longer be accepted. Set `keepdims` to True or False to avoid this warning.
+            # mode, _ = stats.mode(_y[neigh_ind, k], axis=1)
             clf.fit(self.X_train, self.y_train)
             print(f' Time elapsed: {timeit.default_timer() - start_time:.2f}s')
-            sorted(clf.cv_results_.keys())
             df = pd.DataFrame(clf.cv_results_)
-            df.to_csv('stats.csv', index=False)
-            print("hi")
+            filename = (f'gridsearch_{clf.best_estimator_.__class__.__name__.lower()}.csv')
+            save_to = os.path.join(self.result_dir, filename)
+            df.to_csv(save_to, index=False)
+            self.classifiers[n] = (clf.best_estimator_, [],[])
 
     def feature_importance(self):
         # get feature matrix for test images
@@ -152,7 +166,6 @@ class ClassificationController():
                   "T1w_gradient", "T2w_gradient"]
 
         # prepare csv to store results
-        os.makedirs(self.result_dir, exist_ok=True)  # generate result directory, if it does not exists
         with open(os.path.join(self.result_dir, 'feature_importances.csv'), 'w') as f:
             writer = csv.writer(f)
             writer.writerow(header)
@@ -235,5 +248,5 @@ class ClassificationController():
             plt.xlabel('False Positive Rate (FPR)')
             plt.legend(loc=4)
 
-            plt.savefig(os.path.join(output_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
+            plt.savefig(os.path.join(self.result_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
             plt.clf()
