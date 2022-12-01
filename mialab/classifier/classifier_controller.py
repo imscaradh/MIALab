@@ -203,18 +203,22 @@ class ClassificationController:
                 y_pred.append(prediction_array)
                 y_pred_proba.append(probabilities_array)
 
-            # evaluate segmentation without post-processing
-            self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
+                # evaluate segmentation without post-processing
+                self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
+
 
             # TODO: Move those metrics to evaluate()
-            # TODO: maybe write metrics to csv?
+            subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results.csv')
+            summary_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results_summary.csv')
             # use two writers to report the results
             print(f'{"-" * 10} Subject-wise results for {clf.__class__.__name__}...')
             writer.ConsoleWriter().write(self.evaluator.results)
+            writer.CSVWriter(subj_wise_file).write(self.evaluator.results)
 
             # report also mean and standard deviation among all subjects
             print(f'{"-" * 10} Aggregated statistic results for {clf.__class__.__name__}...')
             writer.ConsoleStatisticsWriter(functions={'MEAN': np.mean, 'STD': np.std}).write(self.evaluator.results)
+            writer.CSVStatisticsWriter(summary_file, functions={'MEAN':np.mean, 'STD':np.std}).write(self.evaluator.results)
 
             # clear results such that the evaluator is ready for the next evaluation
             self.evaluator.clear()
