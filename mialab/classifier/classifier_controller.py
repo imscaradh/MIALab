@@ -143,13 +143,6 @@ class ClassificationController:
             print('-' * 5, f'Training for {clf.__class__.__name__}...')
             clf = GridSearchCV(clf, self.params[n], cv=5, scoring='accuracy', verbose=2, refit=True)
             start_time = timeit.default_timer()
-            # todo: Disable warning or find cause. Warning occurs when KNN weights = 'uniform'
-            # FutureWarning: Unlike other reduction functions (e.g. `skew`, `kurtosis`), the default behavior of `mode`
-            # typically preserves the axis it acts along. In SciPy 1.11.0, this behavior will change: the default value
-            # of `keepdims` will become False, the `axis` over which the statistic is taken will be eliminated, and the
-            # value None will no longer be accepted. Set `keepdims` to True or False to avoid this warning.
-            # mode, _ = stats.mode(_y[neigh_ind, k], axis=1)
-            # problem: problem is in read only file of the pipeline
             clf.fit(self.X_train, self.y_train)
             print(f' Time elapsed: {timeit.default_timer() - start_time:.2f}s')
             df = pd.DataFrame(clf.cv_results_)
@@ -197,8 +190,7 @@ class ClassificationController:
                 start_time = timeit.default_timer()
                 predictions = clf.predict(img.feature_matrix[0])
                 probabilities = clf.predict_proba(img.feature_matrix[0])
-                # todo: find why KNN takes soooo long (>450s vs. <100 when not with gridSearch)
-                #  maybe because weights='uniform'?
+
                 print(f'Time for prediction elapsed: {timeit.default_timer() - start_time:.2f}s')
 
                 image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8),
@@ -215,6 +207,7 @@ class ClassificationController:
             self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
             # TODO: Move those metrics to evaluate()
+            # TODO: maybe write metrics to csv?
             # use two writers to report the results
             print(f'{"-" * 10} Subject-wise results for {clf.__class__.__name__}...')
             writer.ConsoleWriter().write(self.evaluator.results)
