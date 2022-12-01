@@ -9,7 +9,6 @@ import sys
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
-from sklearn.model_selection import GridSearchCV
 from sklearn.tree import DecisionTreeClassifier
 from warnings import simplefilter
 
@@ -50,7 +49,7 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
         KNeighborsClassifier(),
         RandomForestClassifier(),
         AdaBoostClassifier()
-    ], result_dir, data_atlas_dir, data_train_dir, data_test_dir, params, limit=1)
+    ], result_dir, data_atlas_dir, data_train_dir, data_test_dir, params, limit=20)
 
     cc.train()
     # cc.feature_importance()
