@@ -10,7 +10,10 @@ import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.naive_bayes import GaussianNB
 from warnings import simplefilter
+from sklearn.svm import SVC
+
 
 simplefilter(action='ignore', category=FutureWarning)
 
@@ -39,16 +42,21 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
 
     # parameters for grid search
     params = [
-        {'n_neighbors': [1, 5, 10, 15, 20, 25], 'weights': ('uniform', 'distance')},
-        {'n_estimators': [5, 10, 15, 20], 'max_features': [2, 5, 7], 'max_depth': [5, 10, 15, 20]},
-        {'base_estimator': (DecisionTreeClassifier(max_depth=2), DecisionTreeClassifier(max_depth=5)), 'n_estimators': [10,50,100], 'learning_rate': [1, 1.5, 2.5], 'algorithm': ("SAMME", "SAMME.R"), 'random_state': [0]}
-
+        {'n_neighbors': [1, 5, 10, 15, 20, 25, 50, 100, 200], 'weights': ('uniform', 'distance')},
+        {'n_estimators': [5, 10, 15, 20, 50, 100], 'max_features': [2, 5, 7], 'max_depth': [5, 10, 20, 30, 50, 70, 100]},
+        {'base_estimator': (DecisionTreeClassifier(max_depth=2), DecisionTreeClassifier(max_depth=5)),
+         'n_estimators': [10,25, 50,75, 100, 200], 'learning_rate': [1, 1.5, 2.5], 'algorithm': ("SAMME", "SAMME.R"),
+         'random_state': [0]},
+        {'var_smoothing': [-9,-7,-5,-3]},
+        {'kernel': ('linear', 'rbf', 'poly', 'sigmoid'), 'C': [1, 10], 'gamma': ('auto', 'scale')}
     ]
 
     cc = ClassificationController([
         KNeighborsClassifier(),
         RandomForestClassifier(),
-        AdaBoostClassifier()
+        AdaBoostClassifier(),
+        GaussianNB(),
+        SVC()
     ], result_dir, data_atlas_dir, data_train_dir, data_test_dir, params, limit=20)
 
     cc.train()
