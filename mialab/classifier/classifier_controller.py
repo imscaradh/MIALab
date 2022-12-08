@@ -181,17 +181,20 @@ class ClassificationController:
                 _writer.writerow(sd_list)
 
     def test(self):
+        prediction_times_aggregated = []
+        mean_prediction_times = []
+
         for clf, y_pred, y_pred_proba in self.classifiers:
             print('-' * 5, f'Testing with {clf.__class__.__name__}...')
-
+            prediction_times_per_clf = []
             for img in self.X_test:
                 print('-' * 10, 'Testing', img.id_)
 
                 start_time = timeit.default_timer()
                 predictions = clf.predict(img.feature_matrix[0])
                 probabilities = clf.predict_proba(img.feature_matrix[0])
-
-                print(f'Time for prediction elapsed: {timeit.default_timer() - start_time:.2f}s')
+                time_elapsed = timeit.default_timer() - start_time
+                prediction_times_per_clf.append(float(f'{time_elapsed:.2f}'))
 
                 image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8),
                                                                                 img.image_properties)
@@ -206,22 +209,39 @@ class ClassificationController:
                 # evaluate segmentation without post-processing
                 self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
+            # print and/or save results
+            print(f'Elapsed times for prediction of {clf.__class__.__name__} in s:\n {prediction_times_per_clf}')
+            mean_prediction_time = float(f'{sum(prediction_times_per_clf)/len(prediction_times_per_clf):.2f}')
 
-            # TODO: Move those metrics to evaluate()
-            subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results.csv')
-            summary_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results_summary.csv')
+            # insert classifier name in first row for identification
+            mean_prediction_times.append([clf.__class__.__name__, mean_prediction_time])
+            print(f'Mean time for prediction of {clf.__class__.__name__}:\n {mean_prediction_time}s')
+
+            # insert classifier name in first row for identification
+            prediction_times_per_clf.insert(0, clf.__class__.__name__)
+            prediction_times_aggregated.append(prediction_times_per_clf)
+
+            # prepare paths for the results files
+            path_to_subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results.csv')
+            path_to_summary_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results_summary.csv')
+
             # use two writers to report the results
             print(f'{"-" * 10} Subject-wise results for {clf.__class__.__name__}...')
             writer.ConsoleWriter().write(self.evaluator.results)
-            writer.CSVWriter(subj_wise_file).write(self.evaluator.results)
+            writer.CSVWriter(path_to_subj_wise_file).write(self.evaluator.results)
 
-            # report also mean and standard deviation among all subjects
+            # report  mean and standard deviation among all subjects
             print(f'{"-" * 10} Aggregated statistic results for {clf.__class__.__name__}...')
             writer.ConsoleStatisticsWriter(functions={'MEAN': np.mean, 'STD': np.std}).write(self.evaluator.results)
-            writer.CSVStatisticsWriter(summary_file, functions={'MEAN':np.mean, 'STD':np.std}).write(self.evaluator.results)
-
+            writer.CSVStatisticsWriter(path_to_summary_file, functions={'MEAN':np.mean, 'STD':np.std}).write(self.evaluator.results)
             # clear results such that the evaluator is ready for the next evaluation
             self.evaluator.clear()
+
+        # save prediction times to csv
+        with open(os.path.join(self.result_dir, 'prediction_times.csv'), 'w') as f:
+            _writer = csv.writer(f)
+            _writer.writerows(prediction_times_aggregated)
+            _writer.writerows(mean_prediction_times)
 
     def post_process(self):
         """ This is not part of our project """
