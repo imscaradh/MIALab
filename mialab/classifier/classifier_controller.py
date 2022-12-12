@@ -192,19 +192,19 @@ class ClassificationController:
 
                 start_time = timeit.default_timer()
                 predictions = clf.predict(img.feature_matrix[0])
-                probabilities = clf.predict_proba(img.feature_matrix[0])
+                # probabilities = clf.predict_proba(img.feature_matrix[0])
                 time_elapsed = timeit.default_timer() - start_time
                 prediction_times_per_clf.append(float(f'{time_elapsed:.2f}'))
 
                 image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8),
                                                                                 img.image_properties)
-                image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
+                # image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
 
                 prediction_array = sitk.GetArrayFromImage(image_prediction)
-                probabilities_array = sitk.GetArrayFromImage(image_probabilities)
+                # probabilities_array = sitk.GetArrayFromImage(image_probabilities)
 
                 y_pred.append(prediction_array)
-                y_pred_proba.append(probabilities_array)
+                # y_pred_proba.append(probabilities_array)
 
                 # evaluate segmentation without post-processing
                 self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
