@@ -146,7 +146,11 @@ class ClassificationController:
             clf.fit(self.X_train, self.y_train)
             print(f' Time elapsed: {timeit.default_timer() - start_time:.2f}s')
             df = pd.DataFrame(clf.cv_results_)
-            filename = f'gridsearch_{clf.best_estimator_.__class__.__name__.lower()}.csv'
+            # extract names of clf of Pipeline, otherwise csv will be overwritten
+            if clf.best_estimator_.__class__.__name__.lower() == 'pipeline':
+                filename = f'gridsearch_{clf.best_estimator_.steps[1][0]}.csv'
+            else:
+                filename = f'gridsearch_{clf.best_estimator_.__class__.__name__.lower()}.csv'
             save_to = os.path.join(self.result_dir, filename)
             df.to_csv(save_to, index=False)
             self.classifiers[n] = (clf.best_estimator_, [], [])
@@ -222,8 +226,12 @@ class ClassificationController:
             prediction_times_aggregated.append(prediction_times_per_clf)
 
             # prepare paths for the results files
-            path_to_subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results.csv')
-            path_to_summary_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results_summary.csv')
+            if clf.__class__.__name__.lower() == "pipeline":
+                path_to_subj_wise_file = os.path.join(self.result_dir, clf.steps[1][0] +'_results.csv')
+                path_to_summary_file = os.path.join(self.result_dir, clf.steps[1][0] +'_results_summary.csv')
+            else:
+                path_to_subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results.csv')
+                path_to_summary_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results_summary.csv')
 
             # use two writers to report the results
             print(f'{"-" * 10} Subject-wise results for {clf.__class__.__name__}...')
@@ -265,5 +273,10 @@ class ClassificationController:
             plt.xlabel('False Positive Rate (FPR)')
             plt.legend(loc=4)
 
-            plt.savefig(os.path.join(self.result_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
+            if clf.__class__.__name__.lower() == "pipeline":
+                plt.savefig(os.path.join(self.result_dir, f'{clf.steps[1][0].lower()}_roc.png'))
+            else:
+                plt.savefig(os.path.join(self.result_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
+
+
             plt.clf()
