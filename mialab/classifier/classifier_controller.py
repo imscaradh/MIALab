@@ -187,7 +187,7 @@ class ClassificationController:
         for clf, y_pred, y_pred_proba in self.classifiers:
             print('-' * 5, f'Testing with {clf.__class__.__name__}...')
             prediction_times_per_clf = []
-            for img in self.X_test:
+            for i, img in enumerate(self.X_test):
                 print('-' * 10, 'Testing', img.id_)
 
                 start_time = timeit.default_timer()
@@ -208,6 +208,9 @@ class ClassificationController:
 
                 # evaluate segmentation without post-processing
                 self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
+
+                # save results
+                sitk.WriteImage(image_prediction, os.path.join(self.result_dir, self.X_test[i].id_ + '_SEG.mha'), True)
 
             # print and/or save results
             print(f'Elapsed times for prediction of {clf.__class__.__name__} in s:\n {prediction_times_per_clf}')

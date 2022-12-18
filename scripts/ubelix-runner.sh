@@ -2,7 +2,7 @@
 
 # SLURM Settings
 #SBATCH --job-name="mialab"
-#SBATCH --time=3:00:00
+#SBATCH --time=24:00:00
 #SBATCH --mem-per-cpu=32G
 #SBATCH --partition=epyc2
 #SBATCH --qos=job_epyc2
