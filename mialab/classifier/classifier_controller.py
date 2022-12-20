@@ -146,7 +146,11 @@ class ClassificationController:
             clf.fit(self.X_train, self.y_train)
             print(f' Time elapsed: {timeit.default_timer() - start_time:.2f}s')
             df = pd.DataFrame(clf.cv_results_)
-            filename = f'gridsearch_{clf.best_estimator_.__class__.__name__.lower()}.csv'
+            # extract names of clf of Pipeline, otherwise csv will be overwritten
+            if clf.best_estimator_.__class__.__name__.lower() == 'pipeline':
+                filename = f'gridsearch_{clf.best_estimator_.steps[1][0]}.csv'
+            else:
+                filename = f'gridsearch_{clf.best_estimator_.__class__.__name__.lower()}.csv'
             save_to = os.path.join(self.result_dir, filename)
             df.to_csv(save_to, index=False)
             self.classifiers[n] = (clf.best_estimator_, [], [])
@@ -181,49 +185,74 @@ class ClassificationController:
                 _writer.writerow(sd_list)
 
     def test(self):
+        prediction_times_aggregated = []
+        mean_prediction_times = []
+
         for clf, y_pred, y_pred_proba in self.classifiers:
             print('-' * 5, f'Testing with {clf.__class__.__name__}...')
-
+            prediction_times_per_clf = []
             for img in self.X_test:
                 print('-' * 10, 'Testing', img.id_)
 
                 start_time = timeit.default_timer()
                 predictions = clf.predict(img.feature_matrix[0])
-                probabilities = clf.predict_proba(img.feature_matrix[0])
-
-                print(f'Time for prediction elapsed: {timeit.default_timer() - start_time:.2f}s')
+                # probabilities = clf.predict_proba(img.feature_matrix[0])
+                time_elapsed = timeit.default_timer() - start_time
+                prediction_times_per_clf.append(float(f'{time_elapsed:.2f}'))
 
                 image_prediction = conversion.NumpySimpleITKImageBridge.convert(predictions.astype(np.uint8),
                                                                                 img.image_properties)
-                image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
-
-                sitk.WriteImage(image_prediction,
-                                os.path.join(self.result_dir, img.id_ + clf.__class__.__name__ + '_SEG.mha'), True)
+                # image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
 
                 prediction_array = sitk.GetArrayFromImage(image_prediction)
-                probabilities_array = sitk.GetArrayFromImage(image_probabilities)
+                # probabilities_array = sitk.GetArrayFromImage(image_probabilities)
 
                 y_pred.append(prediction_array)
-                y_pred_proba.append(probabilities_array)
+                # y_pred_proba.append(probabilities_array)
 
                 # evaluate segmentation without post-processing
                 self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
-            subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ + '_results.csv')
-            summary_file = os.path.join(self.result_dir, clf.__class__.__name__ + '_results_summary.csv')
+                # save results
+                sitk.WriteImage(image_prediction, os.path.join(self.result_dir, img.id_ + clf.__class__.__name__+ '_SEG.mha'), True)
+
+            # print and/or save results
+            print(f'Elapsed times for prediction of {clf.__class__.__name__} in s:\n {prediction_times_per_clf}')
+            mean_prediction_time = float(f'{sum(prediction_times_per_clf)/len(prediction_times_per_clf):.2f}')
+
+            # insert classifier name in first row for identification
+            mean_prediction_times.append([clf.__class__.__name__, mean_prediction_time])
+            print(f'Mean time for prediction of {clf.__class__.__name__}:\n {mean_prediction_time}s')
+
+            # insert classifier name in first row for identification
+            prediction_times_per_clf.insert(0, clf.__class__.__name__)
+            prediction_times_aggregated.append(prediction_times_per_clf)
+
+            # prepare paths for the results files
+            if clf.__class__.__name__.lower() == "pipeline":
+                path_to_subj_wise_file = os.path.join(self.result_dir, clf.steps[1][0] +'_results.csv')
+                path_to_summary_file = os.path.join(self.result_dir, clf.steps[1][0] +'_results_summary.csv')
+            else:
+                path_to_subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results.csv')
+                path_to_summary_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results_summary.csv')
+
             # use two writers to report the results
             print(f'{"-" * 10} Subject-wise results for {clf.__class__.__name__}...')
             writer.ConsoleWriter().write(self.evaluator.results)
-            writer.CSVWriter(subj_wise_file).write(self.evaluator.results)
+            writer.CSVWriter(path_to_subj_wise_file).write(self.evaluator.results)
 
-            # report also mean and standard deviation among all subjects
+            # report  mean and standard deviation among all subjects
             print(f'{"-" * 10} Aggregated statistic results for {clf.__class__.__name__}...')
             writer.ConsoleStatisticsWriter(functions={'MEAN': np.mean, 'STD': np.std}).write(self.evaluator.results)
-            writer.CSVStatisticsWriter(summary_file, functions={'MEAN': np.mean, 'STD': np.std}).write(
-                self.evaluator.results)
-
+            writer.CSVStatisticsWriter(path_to_summary_file, functions={'MEAN':np.mean, 'STD':np.std}).write(self.evaluator.results)
             # clear results such that the evaluator is ready for the next evaluation
             self.evaluator.clear()
+
+        # save prediction times to csv
+        with open(os.path.join(self.result_dir, 'prediction_times.csv'), 'w') as f:
+            _writer = csv.writer(f)
+            _writer.writerows(prediction_times_aggregated)
+            _writer.writerows(mean_prediction_times)
 
     def post_process(self):
         """ This is not part of our project """
@@ -247,5 +276,10 @@ class ClassificationController:
             plt.xlabel('False Positive Rate (FPR)')
             plt.legend(loc=4)
 
-            plt.savefig(os.path.join(self.result_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
+            if clf.__class__.__name__.lower() == "pipeline":
+                plt.savefig(os.path.join(self.result_dir, f'{clf.steps[1][0].lower()}_roc.png'))
+            else:
+                plt.savefig(os.path.join(self.result_dir, f'{clf.__class__.__name__.lower()}_roc.png'))
+
+
             plt.clf()
