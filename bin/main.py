@@ -18,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 
-# simplefilter(action='ignore', category=FutureWarning)
+simplefilter(action='ignore', category=FutureWarning)
 
 try:
     from mialab.classifier.classifier_controller import ClassificationController

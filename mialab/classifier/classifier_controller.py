@@ -75,13 +75,13 @@ class ClassificationController:
             return putil.pre_process_batch(crawler.data, pre_process_params, multi_process=False)
 
         if preload_data:
-            images = self._preload_data('train_preprocessed.pyo', data_train_loader)
+            self.images = self._preload_data('train_preprocessed.pyo', data_train_loader)
         else:
-            images = data_train_loader()
+            self.images = data_train_loader()
 
         # generate feature matrix and label vector
-        self.X_train = np.concatenate([img.feature_matrix[0] for img in images])
-        self.y_train = np.concatenate([img.feature_matrix[1] for img in images]).squeeze()
+        self.X_train = np.concatenate([img.feature_matrix[0] for img in self.images])
+        self.y_train = np.concatenate([img.feature_matrix[1] for img in self.images]).squeeze()
 
         # crawl the test image directories
         crawler = futil.FileSystemDataCrawler(data_test_dir,
@@ -102,7 +102,12 @@ class ClassificationController:
         else:
             self.X_test = data_test_loader()
 
-        # self.y_true = np.concatenate([img.images[structure.BrainImageTypes.GroundTruth] for img in images])  # WTF
+        # TODO: make a pickle file for the GT and T1w_PP files (and maybe also for T2w)
+        [sitk.WriteImage(img.images[structure.BrainImageTypes.GroundTruth],
+                         os.path.join(self.result_dir, img.id_ + '_GT.mha'), True) for img in self.X_test]
+        [sitk.WriteImage(img.images[structure.BrainImageTypes.T1w],
+                         os.path.join(self.result_dir, img.id_ + '_T1w_PP.mha'), True) for img in self.X_test]
+
         self.y_true = np.concatenate([sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth])
                                       for img in self.X_test]).flatten()
 
