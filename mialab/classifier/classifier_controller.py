@@ -197,6 +197,9 @@ class ClassificationController:
                                                                                 img.image_properties)
                 image_probabilities = conversion.NumpySimpleITKImageBridge.convert(probabilities, img.image_properties)
 
+                sitk.WriteImage(image_prediction,
+                                os.path.join(self.result_dir, img.id_ + clf.__class__.__name__ + '_SEG.mha'), True)
+
                 prediction_array = sitk.GetArrayFromImage(image_prediction)
                 probabilities_array = sitk.GetArrayFromImage(image_probabilities)
 
@@ -206,10 +209,8 @@ class ClassificationController:
                 # evaluate segmentation without post-processing
                 self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
-
-            # TODO: Move those metrics to evaluate()
-            subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results.csv')
-            summary_file = os.path.join(self.result_dir, clf.__class__.__name__ +'_results_summary.csv')
+            subj_wise_file = os.path.join(self.result_dir, clf.__class__.__name__ + '_results.csv')
+            summary_file = os.path.join(self.result_dir, clf.__class__.__name__ + '_results_summary.csv')
             # use two writers to report the results
             print(f'{"-" * 10} Subject-wise results for {clf.__class__.__name__}...')
             writer.ConsoleWriter().write(self.evaluator.results)
@@ -218,7 +219,8 @@ class ClassificationController:
             # report also mean and standard deviation among all subjects
             print(f'{"-" * 10} Aggregated statistic results for {clf.__class__.__name__}...')
             writer.ConsoleStatisticsWriter(functions={'MEAN': np.mean, 'STD': np.std}).write(self.evaluator.results)
-            writer.CSVStatisticsWriter(summary_file, functions={'MEAN':np.mean, 'STD':np.std}).write(self.evaluator.results)
+            writer.CSVStatisticsWriter(summary_file, functions={'MEAN': np.mean, 'STD': np.std}).write(
+                self.evaluator.results)
 
             # clear results such that the evaluator is ready for the next evaluation
             self.evaluator.clear()
