@@ -102,14 +102,17 @@ class ClassificationController:
         else:
             self.X_test = data_test_loader()
 
-        # TODO: make a pickle file for the GT and T1w_PP files (and maybe also for T2w)
+        self.y_true = np.concatenate([sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth])
+                                      for img in self.X_test]).flatten()
+
+        # Save preprocessed imgs to visualize segmentation results. Only run once... comment out later
         [sitk.WriteImage(img.images[structure.BrainImageTypes.GroundTruth],
                          os.path.join(self.result_dir, img.id_ + '_GT.mha'), True) for img in self.X_test]
         [sitk.WriteImage(img.images[structure.BrainImageTypes.T1w],
                          os.path.join(self.result_dir, img.id_ + '_T1w_PP.mha'), True) for img in self.X_test]
+        [sitk.WriteImage(img.images[structure.BrainImageTypes.T2w],
+                         os.path.join(self.result_dir, img.id_ + '_T2w_PP.mha'), True) for img in self.X_test]
 
-        self.y_true = np.concatenate([sitk.GetArrayFromImage(img.images[structure.BrainImageTypes.GroundTruth])
-                                      for img in self.X_test]).flatten()
 
         # initialize evaluator
         self.evaluator = putil.init_evaluator()

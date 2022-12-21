@@ -66,9 +66,9 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
 
     cc.train()
     # cc.feature_importance()
-    cc.test()
-    cc.post_process()
-    cc.evaluate()
+    # cc.test()
+    # cc.post_process()
+    # cc.evaluate()
 
 
 if __name__ == "__main__":
