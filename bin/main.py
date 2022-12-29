@@ -49,7 +49,7 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
         {'base_estimator': [DecisionTreeClassifier(max_depth=2)],
          'n_estimators': [10, 25], 'learning_rate': [1], 'algorithm': ["SAMME", "SAMME.R"],
          'random_state': [0]},
-        # {'var_smoothing': [-9,-7,-5,-3]},
+        {'var_smoothing': [-9, -7, -5, -3]},
         # {'svc__kernel': ["poly"]},
         # {'linearsvc__penalty': ['l2'], 'linearsvc__loss': ['hinge'], 'linearsvc__C': [1e-3, 1e-2, 1e-1, 1]}
     ]
@@ -58,7 +58,7 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
         KNeighborsClassifier(),
         RandomForestClassifier(),
         AdaBoostClassifier(),
-        # # GaussianNB(),
+        # GaussianNB(),
         # make_pipeline(StandardScaler(), SVC()),
         # make_pipeline(StandardScaler(), LinearSVC())
     ], result_dir, data_atlas_dir, data_train_dir, data_test_dir, params, limit=2)
