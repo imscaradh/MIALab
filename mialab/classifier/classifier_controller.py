@@ -191,7 +191,7 @@ class ClassificationController:
         for clf, y_pred, y_pred_proba in self.classifiers:
             print('-' * 5, f'Testing with {clf.__class__.__name__}...')
             prediction_times_per_clf = []
-            for img in self.X_test:
+            for i, img in enumerate(self.X_test):
                 print('-' * 10, 'Testing', img.id_)
 
                 start_time = timeit.default_timer()
