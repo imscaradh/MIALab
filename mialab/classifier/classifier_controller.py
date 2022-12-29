@@ -214,7 +214,7 @@ class ClassificationController:
                 self.evaluator.evaluate(image_prediction, img.images[structure.BrainImageTypes.GroundTruth], img.id_)
 
                 # save results
-                sitk.WriteImage(image_prediction, os.path.join(self.result_dir, self.X_test[i].id_ + '_SEG.mha'), True)
+                sitk.WriteImage(image_prediction, os.path.join(self.result_dir, "{}-{}_SEG.mha".format(self.X_test[i].id_, clf.__class__.__name__)), True)
 
             # print and/or save results
             print(f'Elapsed times for prediction of {clf.__class__.__name__} in s:\n {prediction_times_per_clf}')

@@ -17,7 +17,6 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-
 simplefilter(action='ignore', category=FutureWarning)
 
 try:
@@ -45,20 +44,20 @@ def main(result_dir: str, data_atlas_dir: str, data_train_dir: str, data_test_di
 
     # parameters for grid search
     params = [
-        # {'n_neighbors': [1, 5, 10, 15, 20, 25, 50, 100, 200], 'weights': ('uniform', 'distance')},
+        {'n_neighbors': [1, 5, 10, 15, 20, 25, 50, 100, 200], 'weights': ('uniform', 'distance')},
         {'n_estimators': [5, 10], 'max_features': [2, 5], 'max_depth': [5, 10]},
-        # {'base_estimator': [DecisionTreeClassifier(max_depth=2)],
-        #  'n_estimators': [10,25], 'learning_rate': [1], 'algorithm': ["SAMME", "SAMME.R"],
-        #  'random_state': [0]},
+        {'base_estimator': [DecisionTreeClassifier(max_depth=2)],
+         'n_estimators': [10, 25], 'learning_rate': [1], 'algorithm': ["SAMME", "SAMME.R"],
+         'random_state': [0]},
         # {'var_smoothing': [-9,-7,-5,-3]},
         # {'svc__kernel': ["poly"]},
         # {'linearsvc__penalty': ['l2'], 'linearsvc__loss': ['hinge'], 'linearsvc__C': [1e-3, 1e-2, 1e-1, 1]}
     ]
 
     cc = ClassificationController([
-        # KNeighborsClassifier(),
+        KNeighborsClassifier(),
         RandomForestClassifier(),
-        # AdaBoostClassifier(),
+        AdaBoostClassifier(),
         # # GaussianNB(),
         # make_pipeline(StandardScaler(), SVC()),
         # make_pipeline(StandardScaler(), LinearSVC())
